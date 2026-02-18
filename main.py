@@ -10,10 +10,139 @@ from typing import Optional, List, Dict, Any
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger
+from astrbot.api.message_components import Image, Plain
 
 
 ZEROCHAN_API_BASE = "https://www.zerochan.net"
 USER_AGENT = "AstrBot-Zerochan-Plugin"
+
+# 中文名到英文名的映射
+CHINESE_TO_ENGLISH = {
+    # 原神角色
+    "宵宫": "Yoimiya",
+    "荧": "Lumine",
+    "空": "Aether",
+    "芙宁娜": "Furina",
+    "那维莱特": "Neuvillette",
+    "莱欧斯利": "Wriothesley",
+    "纳西妲": "Nahida",
+    "雷电将军": "Raiden Shogun",
+    "胡桃": "Hu Tao",
+    "甘雨": "Ganyu",
+    "刻晴": "Keqing",
+    "莫娜": "Mona",
+    "温迪": "Venti",
+    "钟离": "Zhongli",
+    "魈": "Xiao",
+    "枫原万叶": "Kazuha",
+    "万叶": "Kazuha",
+    "散兵": "Scaramouche",
+    "流浪者": "Wanderer",
+    "八重神子": "Yae Miko",
+    "神子": "Yae Miko",
+    "绫华": "Ayaka",
+    "神里绫华": "Kamisato Ayaka",
+    "绫人": "Ayato",
+    "神里绫人": "Kamisato Ayato",
+    "一斗": "Itto",
+    "荒泷一斗": "Arataki Itto",
+    "五郎": "Gorou",
+    "心海": "Kokomi",
+    "珊瑚宫心海": "Sangonomiya Kokomi",
+    "阿蕾奇诺": "Arlecchino",
+    "仆人": "Arlecchino",
+    "克洛琳德": "Clorinde",
+    "娜维娅": "Navia",
+    "林尼": "Lyney",
+    "琳妮特": "Lynette",
+    "菲米尼": "Freminet",
+    "妮露": "Nilou",
+    "赛诺": "Cyno",
+    "提纳里": "Tighnari",
+    "迪希雅": "Dehya",
+    "艾尔海森": "Alhaitham",
+    "卡维": "Kaveh",
+    "白术": "Baizhu",
+    "瑶瑶": "Yaoyao",
+    "可莉": "Klee",
+    "迪卢克": "Diluc",
+    "琴": "Jean",
+    "芭芭拉": "Barbara",
+    "安柏": "Amber",
+    "丽莎": "Lisa",
+    "凯亚": "Kaeya",
+    "诺艾尔": "Noelle",
+    "班尼特": "Bennett",
+    "雷泽": "Razor",
+    "菲谢尔": "Fischl",
+    "北斗": "Beidou",
+    "凝光": "Ningguang",
+    "香菱": "Xiangling",
+    "行秋": "Xingqiu",
+    "重云": "Chongyun",
+    "七七": "Qiqi",
+    "辛焱": "Xinyan",
+    "砂糖": "Sucrose",
+    "迪奥娜": "Diona",
+    "罗莎莉亚": "Rosaria",
+    "烟绯": "Yanfei",
+    "优菈": "Eula",
+    "托马": "Thoma",
+    "九条裟罗": "Kujou Sara",
+    "早柚": "Sayu",
+    "夜兰": "Yelan",
+    "久岐忍": "Kuki Shinobu",
+    "鹿野院平藏": "Heizou",
+    "柯莱": "Collei",
+    "多莉": "Dori",
+    "坎蒂丝": "Candace",
+    "莱依拉": "Layla",
+    "流浪者": "Wanderer",
+    "瑶瑶": "Yaoyao",
+    "艾莉丝": "Alhaitham",
+    "米卡": "Mika",
+    "卡维": "Kaveh",
+    "绮良良": "Kirara",
+    "珐露珊": "Faruzan",
+    "瑶瑶": "Yaoyao",
+    "闲云": "Xianyun",
+    "嘉明": "Gaming",
+    "夏沃蕾": "Chevreuse",
+    "夏洛蒂": "Charlotte",
+    "娜维娅": "Navia",
+    "芙宁娜": "Furina",
+    "那维莱特": "Neuvillette",
+    "莱欧斯利": "Wriothesley",
+    "希格雯": "Sigewinne",
+    "克洛琳德": "Clorinde",
+    "赛索斯": "Sethos",
+    "艾梅莉埃": "Emilie",
+    "基尼奇": "Kinich",
+    "玛拉妮": "Mualani",
+    "卡齐娜": "Kachina",
+    "希诺宁": "Xilonen",
+    "恰斯卡": "Chasca",
+    "欧洛伦": "Ororon",
+    "茜特菈莉": "Citlali",
+    "伊安珊": "Iansan",
+    "瓦雷莎": "Varesa",
+    "伊法": "Ifa",
+    # 原神通用
+    "原神": "Genshin Impact",
+    "旅行者": "Traveler",
+    # 其他动漫角色
+    "初音未来": "Hatsune Miku",
+    "miku": "Hatsune Miku",
+    "蕾姆": "Rem",
+    "拉姆": "Ram",
+    "艾米莉亚": "Emilia",
+    "碧蓝档案": "Blue Archive",
+    "蔚蓝档案": "Blue Archive",
+    "明日方舟": "Arknights",
+    "崩坏星穹铁道": "Honkai: Star Rail",
+    "星穹铁道": "Honkai: Star Rail",
+    "崩坏": "Honkai",
+}
 
 
 class ZerochanAPI:
@@ -41,7 +170,6 @@ class ZerochanAPI:
                             return {"data": data, "final_url": str(response.url)}
                         except json.JSONDecodeError:
                             # 不是 JSON，可能是重定向到了正确的标签页
-                            # 尝试从 HTML 中提取正确的标签名
                             correct_tag = self._extract_tag_from_html(text)
                             if correct_tag:
                                 logger.info(f"Zerochan API: 检测到重定向，正确标签为 '{correct_tag}'")
@@ -63,22 +191,25 @@ class ZerochanAPI:
 
     def _extract_tag_from_html(self, html: str) -> Optional[str]:
         """从 HTML 页面中提取正确的标签名"""
-        # 尝试从 title 中提取
-        # 例如: <title>Furina de Fontaine - Zerochan</title>
         title_match = re.search(r'<title>([^-]+)\s*-\s*Zerochan', html)
         if title_match:
             return title_match.group(1).strip()
 
-        # 尝试从 canonical 链接中提取
         canonical_match = re.search(r'<link[^>]*rel="canonical"[^>]*href="[^"]*/([^"/]+)"', html)
         if canonical_match:
             return canonical_match.group(1).replace("+", " ")
 
         return None
 
+    def _translate_chinese(self, tag: str) -> str:
+        """将中文标签翻译为英文"""
+        return CHINESE_TO_ENGLISH.get(tag, tag)
+
     def _generate_tag_variants(self, tag: str) -> List[str]:
         """生成标签变体列表"""
-        variants = [tag]
+        # 先尝试中文翻译
+        translated = self._translate_chinese(tag)
+        variants = [translated] if translated != tag else [tag]
 
         # 常见角色名变体
         common_variants = {
@@ -106,7 +237,6 @@ class ZerochanAPI:
             "arlecchino": ["Arlecchino", "The Knave"],
             "clorinde": ["Clorinde"],
             "navia": ["Navia"],
-            "furina": ["Furina", "Furina de Fontaine"],
             "neuvillette": ["Neuvillette"],
             "wriothesley": ["Wriothesley"],
             "lyney": ["Lyney"],
@@ -120,16 +250,18 @@ class ZerochanAPI:
             "kaveh": ["Kaveh"],
             "baizhu": ["Baizhu"],
             "yaoyao": ["Yaoyao"],
+            "genshin impact": ["Genshin Impact", "Genshin"],
+            "hatsune miku": ["Hatsune Miku", "Miku"],
         }
 
-        tag_lower = tag.lower()
+        tag_lower = translated.lower()
         if tag_lower in common_variants:
             for variant in common_variants[tag_lower]:
                 if variant not in variants:
                     variants.append(variant)
 
         # 首字母大写
-        capitalized = tag.title()
+        capitalized = translated.title()
         if capitalized not in variants:
             variants.append(capitalized)
 
@@ -146,19 +278,7 @@ class ZerochanAPI:
         color: str = None,
         time_sort: int = None,
     ) -> Optional[Dict[str, Any]]:
-        """
-        搜索图片
-
-        Args:
-            tags: 标签，多个标签用逗号分隔
-            page: 页码
-            limit: 每页数量 (1-250)
-            sort: 排序方式 (id|fav)
-            strict: 是否严格模式
-            dimensions: 尺寸过滤 (large|huge|landscape|portrait|square)
-            color: 颜色过滤
-            time_sort: 时间范围 (0|1|2)
-        """
+        """搜索图片"""
         # 生成标签变体
         tag_variants = self._generate_tag_variants(tags)
         tried_tags = []
@@ -250,8 +370,8 @@ class ZerochanPlugin(Star):
                 "用法: /zc <标签> [页码] [数量]\n"
                 "示例:\n"
                 "  /zc Genshin Impact - 搜索原神相关图片\n"
-                "  /zc Lumine 1 5 - 搜索荧，第1页，5张图\n"
-                "  /zc furina - 自动匹配正确标签名"
+                "  /zc 宵宫 - 支持中文角色名\n"
+                "  /zc furina 1 5 - 第1页，5张图"
             )
             return
 
@@ -285,27 +405,52 @@ class ZerochanPlugin(Star):
         # 解析结果
         data = result.get("data", {})
         used_tag = result.get("used_tag", tags)
-        items = data.get("items", [])
+
+        # 打印调试信息
+        logger.debug(f"API 返回数据: {data}")
+
+        # 检查数据结构
+        items = []
+        total = 0
+
+        if isinstance(data, list):
+            # 有时候返回的是列表
+            items = data
+            total = len(items)
+        elif isinstance(data, dict):
+            items = data.get("items", [])
+            # total 可能在不同位置
+            total = data.get("total", 0)
+            if total == 0 and items:
+                total = len(items)
 
         if not items:
             yield event.plain_result(f"未找到与 '{tags}' 相关的图片。")
             return
 
         # 构建回复消息
-        total = data.get("total", 0)
         reply = f"搜索 '{used_tag}' 找到 {total} 张图片，显示第 {page} 页:\n"
 
         # 发送图片
         image_urls = []
         for item in items[:limit]:
-            thumbnail = item.get("thumbnail", "")
-            image_url = item.get("image", thumbnail)
+            # 尝试多种可能的图片字段
+            image_url = None
+            for field in ["image", "thumbnail", "src", "url"]:
+                if item.get(field):
+                    image_url = item.get(field)
+                    break
+
             if image_url:
                 image_urls.append(image_url)
+                logger.debug(f"获取到图片URL: {image_url}")
 
         if image_urls:
-            yield event.plain_result(reply.rstrip())
-            yield event.image_result(image_urls[0])
+            # 使用消息链发送图文
+            yield event.chain_result([
+                Plain(text=reply.rstrip()),
+                Image.fromURL(image_urls[0])
+            ])
         else:
             yield event.plain_result(reply + "无法获取图片链接")
 
@@ -345,7 +490,13 @@ class ZerochanPlugin(Star):
         if isinstance(result, list) and len(result) > 0:
             result = result[0]
 
-        image_url = result.get("image", "")
+        # 尝试多种可能的图片字段
+        image_url = None
+        for field in ["image", "thumbnail", "src", "url"]:
+            if result.get(field):
+                image_url = result.get(field)
+                break
+
         width = result.get("width", "未知")
         height = result.get("height", "未知")
         size = result.get("size", "未知")
@@ -367,9 +518,14 @@ class ZerochanPlugin(Star):
                 tags_str += f" ...共{len(tags_list)}个标签"
             reply += f"标签: {tags_str}\n"
 
+        logger.debug(f"图片详情: image_url={image_url}")
+
         if image_url:
-            yield event.plain_result(reply)
-            yield event.image_result(image_url)
+            # 使用消息链发送图文
+            yield event.chain_result([
+                Plain(text=reply),
+                Image.fromURL(image_url)
+            ])
         else:
             yield event.plain_result(reply)
 
@@ -386,10 +542,12 @@ class ZerochanPlugin(Star):
             "\n"
             "示例:\n"
             "  /zc Genshin Impact - 搜索原神\n"
+            "  /zc 宵宫 - 支持中文角色名\n"
             "  /zc furina - 自动匹配正确标签\n"
             "  /zcid 3793685 - 获取指定图片\n"
             "\n"
             "特性:\n"
+            "  - 支持中文角色名\n"
             "  - 自动匹配标签变体\n"
             "  - 支持角色别名\n"
             "  - API限制60次/分钟"
