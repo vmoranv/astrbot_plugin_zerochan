@@ -6,6 +6,7 @@ AstrBot Zerochan 图片搜索插件
 import aiohttp
 import json
 import re
+import random
 from typing import Optional, List, Dict, Any
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.star import Context, Star, register
@@ -446,10 +447,12 @@ class ZerochanPlugin(Star):
                 logger.debug(f"获取到图片URL: {image_url}")
 
         if image_urls:
+            # 随机选择一张图片发送
+            selected_url = random.choice(image_urls)
             # 使用消息链发送图文
             yield event.chain_result([
                 Plain(text=reply.rstrip()),
-                Image.fromURL(image_urls[0])
+                Image.fromURL(selected_url)
             ])
         else:
             yield event.plain_result(reply + "无法获取图片链接")
