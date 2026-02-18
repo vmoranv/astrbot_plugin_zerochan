@@ -94,7 +94,7 @@ result = await self.api.search(
 
 ## 许可证
 
-MIT License
+GNU Affero General Public License v3.0
 
 ## 相关链接
 

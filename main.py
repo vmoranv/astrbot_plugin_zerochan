@@ -31,8 +31,20 @@ class ZerochanAPI:
                     url, params=params, headers=self.headers, timeout=aiohttp.ClientTimeout(total=30)
                 ) as response:
                     if response.status == 200:
-                        data = await response.json()
-                        return data
+                        content_type = response.headers.get('Content-Type', '')
+                        if 'application/json' in content_type:
+                            data = await response.json()
+                            return data
+                        else:
+                            # 尝试解析 JSON，即使 Content-Type 不是 JSON
+                            try:
+                                text = await response.text()
+                                import json
+                                data = json.loads(text)
+                                return data
+                            except:
+                                logger.warning(f"Zerochan API: 响应不是 JSON 格式 - {content_type}")
+                                return None
                     elif response.status == 404:
                         logger.warning(f"Zerochan API: 资源未找到 - {url}")
                         return None
@@ -188,7 +200,8 @@ class ZerochanPlugin(Star):
 
         if image_urls:
             # 创建消息链，包含文本和图片
-            yield event.image_result(image_urls[0], reply.rstrip())
+            yield event.plain_result(reply.rstrip())
+            yield event.image_result(image_urls[0])
         else:
             yield event.plain_result(reply + "无法获取图片链接")
 
@@ -253,7 +266,8 @@ class ZerochanPlugin(Star):
             reply += f"标签: {tags_str}\n"
 
         if image_url:
-            yield event.image_result(image_url, reply)
+            yield event.plain_result(reply)
+            yield event.image_result(image_url)
         else:
             yield event.plain_result(reply)
 
