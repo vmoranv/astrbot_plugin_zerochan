@@ -4,11 +4,12 @@ AstrBot Zerochan 图片搜索插件
 """
 
 import aiohttp
-from typing import Optional, List, Dict, Any, AsyncGenerator
-from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
+import json
+import re
+from typing import Optional, List, Dict, Any
+from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger
-from astrbot.api.message_components import Image
 
 
 ZEROCHAN_API_BASE = "https://www.zerochan.net"
@@ -22,29 +23,31 @@ class ZerochanAPI:
         self.base_url = ZEROCHAN_API_BASE
         self.user_agent = f"{USER_AGENT} - {username}"
         self.headers = {"User-Agent": self.user_agent}
+        self.cookies = {"z_lang": "en"}
 
     async def _request(self, url: str, params: dict = None) -> Optional[Dict[str, Any]]:
         """发送 API 请求"""
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(
-                    url, params=params, headers=self.headers, timeout=aiohttp.ClientTimeout(total=30)
+                    url, params=params, headers=self.headers, cookies=self.cookies,
+                    timeout=aiohttp.ClientTimeout(total=30), allow_redirects=True
                 ) as response:
                     if response.status == 200:
-                        content_type = response.headers.get('Content-Type', '')
-                        if 'application/json' in content_type:
-                            data = await response.json()
-                            return data
-                        else:
-                            # 尝试解析 JSON，即使 Content-Type 不是 JSON
-                            try:
-                                text = await response.text()
-                                import json
-                                data = json.loads(text)
-                                return data
-                            except:
-                                logger.warning(f"Zerochan API: 响应不是 JSON 格式 - {content_type}")
-                                return None
+                        text = await response.text()
+                        # 尝试解析 JSON
+                        try:
+                            data = json.loads(text)
+                            return {"data": data, "final_url": str(response.url)}
+                        except json.JSONDecodeError:
+                            # 不是 JSON，可能是重定向到了正确的标签页
+                            # 尝试从 HTML 中提取正确的标签名
+                            correct_tag = self._extract_tag_from_html(text)
+                            if correct_tag:
+                                logger.info(f"Zerochan API: 检测到重定向，正确标签为 '{correct_tag}'")
+                                return {"redirect_tag": correct_tag}
+                            logger.warning("Zerochan API: 响应不是 JSON 格式")
+                            return None
                     elif response.status == 404:
                         logger.warning(f"Zerochan API: 资源未找到 - {url}")
                         return None
@@ -57,6 +60,80 @@ class ZerochanAPI:
         except Exception as e:
             logger.error(f"Zerochan API 未知错误: {e}")
             return None
+
+    def _extract_tag_from_html(self, html: str) -> Optional[str]:
+        """从 HTML 页面中提取正确的标签名"""
+        # 尝试从 title 中提取
+        # 例如: <title>Furina de Fontaine - Zerochan</title>
+        title_match = re.search(r'<title>([^-]+)\s*-\s*Zerochan', html)
+        if title_match:
+            return title_match.group(1).strip()
+
+        # 尝试从 canonical 链接中提取
+        canonical_match = re.search(r'<link[^>]*rel="canonical"[^>]*href="[^"]*/([^"/]+)"', html)
+        if canonical_match:
+            return canonical_match.group(1).replace("+", " ")
+
+        return None
+
+    def _generate_tag_variants(self, tag: str) -> List[str]:
+        """生成标签变体列表"""
+        variants = [tag]
+
+        # 常见角色名变体
+        common_variants = {
+            "furina": ["Furina", "Furina de Fontaine", "Focalors"],
+            "lumine": ["Lumine", "Traveler (Female)", "Female Traveler"],
+            "aether": ["Aether", "Traveler (Male)", "Male Traveler"],
+            "nahida": ["Nahida", "Lesser Lord Kusanali"],
+            "raiden shogun": ["Raiden Shogun", "Raiden Ei", "Ei", "Baal"],
+            "hu tao": ["Hu Tao", "Hutao"],
+            "ganyu": ["Ganyu"],
+            "keqing": ["Keqing"],
+            "mona": ["Mona", "Mona Megistus"],
+            "venti": ["Venti", "Barbatos"],
+            "zhongli": ["Zhongli", "Rex Lapis"],
+            "xiao": ["Xiao", "Alatus"],
+            "kazuha": ["Kazuha", "Kaedehara Kazuha"],
+            "scaramouche": ["Scaramouche", "Wanderer", "Kunikuzushi"],
+            "yae miko": ["Yae Miko", "Guuji Yae"],
+            "yoimiya": ["Yoimiya"],
+            "ayaka": ["Ayaka", "Kamisato Ayaka"],
+            "ayato": ["Ayato", "Kamisato Ayato"],
+            "itto": ["Itto", "Arataki Itto"],
+            "gorou": ["Gorou"],
+            "kokomi": ["Kokomi", "Sangonomiya Kokomi"],
+            "arlecchino": ["Arlecchino", "The Knave"],
+            "clorinde": ["Clorinde"],
+            "navia": ["Navia"],
+            "furina": ["Furina", "Furina de Fontaine"],
+            "neuvillette": ["Neuvillette"],
+            "wriothesley": ["Wriothesley"],
+            "lyney": ["Lyney"],
+            "lynette": ["Lynette"],
+            "freminet": ["Freminet"],
+            "nilou": ["Nilou"],
+            "cyno": ["Cyno"],
+            "tighnari": ["Tighnari"],
+            "dehya": ["Dehya"],
+            "alhaitham": ["Alhaitham"],
+            "kaveh": ["Kaveh"],
+            "baizhu": ["Baizhu"],
+            "yaoyao": ["Yaoyao"],
+        }
+
+        tag_lower = tag.lower()
+        if tag_lower in common_variants:
+            for variant in common_variants[tag_lower]:
+                if variant not in variants:
+                    variants.append(variant)
+
+        # 首字母大写
+        capitalized = tag.title()
+        if capitalized not in variants:
+            variants.append(capitalized)
+
+        return variants
 
     async def search(
         self,
@@ -73,7 +150,7 @@ class ZerochanAPI:
         搜索图片
 
         Args:
-            tags: 标���，多个标签用逗号分隔
+            tags: 标签，多个标签用逗号分隔
             page: 页码
             limit: 每页数量 (1-250)
             sort: 排序方式 (id|fav)
@@ -82,38 +159,66 @@ class ZerochanAPI:
             color: 颜色过滤
             time_sort: 时间范围 (0|1|2)
         """
-        # 构建URL
-        if tags:
-            # 处理标签中的空格，转换为 +
-            tag_path = tags.replace(" ", "+").replace(",", ",")
+        # 生成标签变体
+        tag_variants = self._generate_tag_variants(tags)
+        tried_tags = []
+
+        for tag in tag_variants:
+            tried_tags.append(tag)
+
+            # 构建URL
+            tag_path = tag.replace(" ", "+")
             url = f"{self.base_url}/{tag_path}"
-        else:
-            url = f"{self.base_url}"
 
-        # 构建参数
-        params = {"json": ""}
+            # 构建参数
+            params = {"json": ""}
 
-        if page:
-            params["p"] = page
-        if limit and 1 <= limit <= 250:
-            params["l"] = limit
-        if sort and sort in ("id", "fav"):
-            params["s"] = sort
-        if strict:
-            params["strict"] = ""
-        if dimensions and dimensions in ("large", "huge", "landscape", "portrait", "square"):
-            params["d"] = dimensions
-        if color:
-            params["c"] = color
-        if time_sort is not None and time_sort in (0, 1, 2):
-            params["t"] = time_sort
+            if page:
+                params["p"] = page
+            if limit and 1 <= limit <= 250:
+                params["l"] = limit
+            if sort and sort in ("id", "fav"):
+                params["s"] = sort
+            if strict:
+                params["strict"] = ""
+            if dimensions and dimensions in ("large", "huge", "landscape", "portrait", "square"):
+                params["d"] = dimensions
+            if color:
+                params["c"] = color
+            if time_sort is not None and time_sort in (0, 1, 2):
+                params["t"] = time_sort
 
-        return await self._request(url, params)
+            result = await self._request(url, params)
+
+            if result is None:
+                continue
+
+            # 如果检测到重定向，尝试使用正确的标签
+            if "redirect_tag" in result:
+                correct_tag = result["redirect_tag"]
+                if correct_tag and correct_tag not in tried_tags:
+                    logger.info(f"Zerochan API: 尝试使用重定向标签 '{correct_tag}'")
+                    correct_tag_path = correct_tag.replace(" ", "+")
+                    correct_url = f"{self.base_url}/{correct_tag_path}"
+                    result = await self._request(correct_url, params)
+                    if result and "data" in result:
+                        result["used_tag"] = correct_tag
+                        return result
+                continue
+
+            if "data" in result:
+                result["used_tag"] = tag
+                return result
+
+        return None
 
     async def get_entry(self, entry_id: int) -> Optional[Dict[str, Any]]:
         """获取单个条目详情"""
         url = f"{self.base_url}/{entry_id}"
-        return await self._request(url, {"json": ""})
+        result = await self._request(url, {"json": ""})
+        if result and "data" in result:
+            return result["data"]
+        return None
 
 
 @register("astrbot_plugin_zerochan", "vmoranv", "Zerochan 图片搜索插件", "1.0.0")
@@ -145,61 +250,60 @@ class ZerochanPlugin(Star):
                 "用法: /zc <标签> [页码] [数量]\n"
                 "示例:\n"
                 "  /zc Genshin Impact - 搜索原神相关图片\n"
-                "  /zc Lumine 1 5 - 搜索荧，第1页，5张图"
+                "  /zc Lumine 1 5 - 搜索荧，第1页，5张图\n"
+                "  /zc furina - 自动匹配正确标签名"
             )
             return
 
         # 解析标签和可选参数
         tags = parts[1]
         page = 1
-        limit = 3  # 默认显示3张
+        limit = 3
 
         if len(parts) >= 3:
             try:
                 page = int(parts[2])
             except ValueError:
-                # 可能是标签的一部分
                 tags = f"{parts[1]} {parts[2]}"
 
         if len(parts) >= 4:
             try:
                 limit = int(parts[3])
-                limit = min(limit, 10)  # 最多显示10张
+                limit = min(limit, 10)
             except ValueError:
                 pass
 
-        # 发送搜索中提示
         logger.info(f"搜索 Zerochan: 标签={tags}, 页码={page}, 数量={limit}")
 
         # 调用 API
         result = await self.api.search(tags=tags, page=page, limit=limit, sort="fav")
 
         if not result:
-            yield event.plain_result("搜索失败，请稍后重试或检查网络连接。")
+            yield event.plain_result(f"搜索 '{tags}' 失败，请检查标签名或稍后重试。")
             return
 
         # 解析结果
-        items = result.get("items", [])
+        data = result.get("data", {})
+        used_tag = result.get("used_tag", tags)
+        items = data.get("items", [])
+
         if not items:
             yield event.plain_result(f"未找到与 '{tags}' 相关的图片。")
             return
 
         # 构建回复消息
-        total = result.get("total", 0)
-        reply = f"搜索 '{tags}' 找到 {total} 张图片，显示第 {page} 页:\n"
+        total = data.get("total", 0)
+        reply = f"搜索 '{used_tag}' 找到 {total} 张图片，显示第 {page} 页:\n"
 
         # 发送图片
         image_urls = []
         for item in items[:limit]:
-            # 优先获取中等尺寸图片
             thumbnail = item.get("thumbnail", "")
             image_url = item.get("image", thumbnail)
-
             if image_url:
                 image_urls.append(image_url)
 
         if image_urls:
-            # 创建消息链，包含文本和图片
             yield event.plain_result(reply.rstrip())
             yield event.image_result(image_urls[0])
         else:
@@ -242,11 +346,9 @@ class ZerochanPlugin(Star):
             result = result[0]
 
         image_url = result.get("image", "")
-        thumbnail = result.get("thumbnail", image_url)
         width = result.get("width", "未知")
         height = result.get("height", "未知")
         size = result.get("size", "未知")
-        source = result.get("source", "未知")
         author = result.get("author", "未知")
         tags_list = result.get("tags", [])
 
@@ -284,12 +386,12 @@ class ZerochanPlugin(Star):
             "\n"
             "示例:\n"
             "  /zc Genshin Impact - 搜索原神\n"
-            "  /zc Lumine 1 5 - 搜索荧，第1页，5张\n"
+            "  /zc furina - 自动匹配正确标签\n"
             "  /zcid 3793685 - 获取指定图片\n"
             "\n"
-            "提示:\n"
-            "  - 标签支持空格和���号分隔\n"
-            "  - 每次最多显示10张图片\n"
+            "特性:\n"
+            "  - 自动匹配标签变体\n"
+            "  - 支持角色别名\n"
             "  - API限制60次/分钟"
         )
         yield event.plain_result(help_text)
